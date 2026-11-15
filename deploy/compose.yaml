@@ -1,0 +1,92 @@
+name: steal-the-vfy-agent
+
+services:
+  agent:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: runtime
+    # One process owns the file store. Do not scale or run another stack against it.
+    scale: 1
+    init: true
+    restart: unless-stopped
+    user: node
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_signal: SIGTERM
+    # The application drains for up to 10 seconds; allow time to exit before SIGKILL.
+    stop_grace_period: 12s
+    env_file:
+      # Resolved relative to this file: the project-root .env, not deploy/.env.
+      # Raw values preserve literal dollar signs in secrets (Compose >= 2.30).
+      - path: ../.env
+        required: true
+        format: raw
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      ARTIFACT_DIRECTORY: /app/artifacts
+      DATA_DIRECTORY: /app/runtime
+      ZKVERIFY_NETWORK: volta
+      ALLOW_COMPETITION: "false"
+    expose:
+      - "3000"
+    volumes:
+      - agent_runtime:/app/runtime
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - --input-type=module
+        - -e
+        - "try { const r = await fetch('http://127.0.0.1:3000/healthz', { signal: AbortSignal.timeout(3000) }); process.exit(r.status === 200 ? 0 : 1); } catch { process.exit(1); }"
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - agent_net
+
+  caddy:
+    image: caddy:2-alpine
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 10s
+    # Caddy binds high container ports so it needs no NET_BIND_SERVICE capability.
+    ports:
+      - "80:8080"
+      - "443:8443"
+    environment:
+      AGENT_DOMAIN: "${AGENT_DOMAIN:?Set AGENT_DOMAIN to the public DNS hostname you control}"
+    depends_on:
+      agent:
+        condition: service_healthy
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    networks:
+      - agent_net
+
+networks:
+  # Outbound HTTPS is needed for certificate issuance and Volta verification.
+  agent_net:
+    driver: bridge
+
+volumes:
+  agent_runtime:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,15 @@
+.git
+node_modules
+dist
+.env
+.env.*
+*.env
+secrets
+private
+strategy.private.*
+runtime
+coverage
+*.log
+*.wtns
+*.ptau
+tests

@@ -1,0 +1,24 @@
+{
+	admin off
+	# Docker maps public 80/443 to these unprivileged listener ports.
+	http_port 8080
+	https_port 8443
+	servers {
+		protocols h1 h2
+	}
+}
+
+# Keep the redirect on public HTTPS port 443, not the internal listener port.
+http://{$AGENT_DOMAIN} {
+	redir https://{$AGENT_DOMAIN}{uri} 308
+}
+
+https://{$AGENT_DOMAIN} {
+	@agent_routes path /agent /healthz /readyz
+	handle @agent_routes {
+		reverse_proxy agent:3000
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
