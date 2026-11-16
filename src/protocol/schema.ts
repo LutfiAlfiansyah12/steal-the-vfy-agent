@@ -49,11 +49,15 @@ export type TurnResponse = {
   matchId: string;
   turn: number;
   action: Action;
-  policyProof: { circuitVersion: 'v1'; publicInputsHash: `0x${string}`; proofReference?: string };
+  policyProof: {
+    circuitVersion: 'v1';
+    publicInputsHash: `0x${string}`;
+    proofReference?: string;
+    proof?: Record<string, unknown>;
+    public_signals?: string[];
+  };
   agentTimestamp: string;
   idempotencyKey: string;
-  proof?: Record<string, unknown>;
-  public_signals?: string[];
 };
 
 export function freshTimestamp(issuedAt: string, now: number, maxAgeMs: number, skewMs: number): boolean {

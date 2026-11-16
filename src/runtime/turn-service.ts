@@ -95,9 +95,10 @@ export class TurnService {
             throwIfAborted(signal);
             const response = this.response(envelope);
             response.action = evidence.action;
-            response.policyProof = { circuitVersion: 'v1', publicInputsHash: evidence.hash, proofReference: evidence.proofReference };
-            response.proof = evidence.bundle.proof;
-            response.public_signals = evidence.bundle.publicSignals;
+            response.policyProof = {
+              circuitVersion: 'v1', publicInputsHash: evidence.hash, proofReference: evidence.proofReference,
+              proof: evidence.bundle.proof, public_signals: evidence.bundle.publicSignals,
+            };
             body = JSON.stringify(response);
           } catch {
             log('turn_hold');

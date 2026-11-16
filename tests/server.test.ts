@@ -187,8 +187,10 @@ test('successful mocked pipeline serializes proof and echoes public envelope fie
   const turn = envelope();
   const result = await app.post(JSON.stringify(turn));
   assert.equal(result.body.policyProof.proofReference, proofReference);
-  assert.deepEqual(result.body.proof, { testOnly: true });
-  assert.deepEqual(result.body.public_signals, []);
+  assert.deepEqual(result.body.policyProof.proof, { testOnly: true });
+  assert.deepEqual(result.body.policyProof.public_signals, []);
+  assert.equal('proof' in result.body, false);
+  assert.equal('public_signals' in result.body, false);
   assert.equal(result.body.matchId, turn.matchId);
   assert.equal(result.body.turn, turn.turn);
   assert.deepEqual(result.body.action, HOLD);

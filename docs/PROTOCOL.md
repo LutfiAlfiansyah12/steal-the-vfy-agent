@@ -19,7 +19,9 @@ Preflight request: `type: "agent-games.preflight.v1"`, `agent_id`, `issued_at`, 
 
 Turn: `protocolVersion:"v1"`, `eventId:"steal-the-vfy"`, `mode`, `matchId`, `turn`, `issuedAt`, `deadlineAt`, `state` with decimal-string balances and nullable fortification turns, `strategyCommitment.hash`, `resolverVersion:"v1"`, `nonce`.
 
-Successful response echoes `matchId` and `turn` and includes `action`, `policyProof:{circuitVersion,proofReference,publicInputsHash}`, `agentTimestamp`, `idempotencyKey`, top-level `proof` and `public_signals`. HOLD/FORTIFY never include `action.amount`; their internal circuit/audit amount is zero.
+Successful response echoes `matchId` and `turn` and includes `action`, `policyProof:{circuitVersion,proofReference,publicInputsHash,proof,public_signals}`, `agentTimestamp`, and `idempotencyKey`. The live official build page checked on 2026-11-16 explicitly requires proof and public_signals INSIDE policyProof, not at the top level; the service follows that placement. HOLD/FORTIFY never include `action.amount`; their internal circuit/audit amount is zero.
+
+The input parser additionally accepts an explicitly supplied bare 32-byte hash string in `strategyCommitment` and normalizes it to `{hash}` after HMAC verification. This is a compatibility extension, not evidence that the official competition example changed. Missing/null/invalid commitments are still rejected and never replaced with the agent's local hash. Diagnostic logs report only allowed field paths, error codes and commitment representation (string/object/null/missing), never received values.
 
 ## Exact audit hash
 
