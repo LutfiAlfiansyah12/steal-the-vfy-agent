@@ -5,8 +5,9 @@
 > from the pinned official WASM and checked with real local proofs against its zkey.
 > No strategy parameter values have been selected. With only a valid HMAC secret,
 > `/healthz` is 200 and `/readyz` is 503; turns safely return unproven HOLD.
-> Configure your own private parameters, salt and Volta key, then verify real
-> platform practice acceptance and finality before enabling scored competition.
+> Configure your own private parameters and salt. Local proof response mode is
+> the default and needs no Kurier key; explicit `finalized` mode needs a Volta key.
+> Verify real platform practice acceptance before enabling scored competition.
 > A healthy container or passing preflight does not establish live proof acceptance.
 
 These files prepare one agent behind Caddy on a Linux VPS. Creating them does not
@@ -53,6 +54,7 @@ contains no credentials or strategy values:
 
 ```dotenv
 AGENT_GAMES_HMAC_SECRET=
+PROOF_VERIFICATION_MODE=local
 KURIER_API_KEY=
 STRATEGY_PARAMS_JSON=
 STRATEGY_SALT=
@@ -60,8 +62,13 @@ STRATEGY_SALT=
 
 - `AGENT_GAMES_HMAC_SECRET` must be the owner-supplied shared signing secret and
   contain at least 16 characters. An empty or invalid value prevents startup.
-- `KURIER_API_KEY` must be the owner's Volta testnet credential before proof
-  verification can work.
+- `PROOF_VERIFICATION_MODE` accepts `local` or `finalized` and defaults to `local`.
+  Local mode verifies the proof and all public signals locally, returns the proof
+  bundle inside `policyProof`, and omits `proofReference` entirely. It makes no
+  Kurier submission. `circuitVersion` and computed `publicInputsHash` remain included.
+- `KURIER_API_KEY` is required only for `finalized` mode and must then be the owner's
+  Volta testnet credential. A configured key may remain unused in local mode.
+  Finalized mode submits the locally verified bundle and retains `waitFinalized`.
 - `STRATEGY_PARAMS_JSON` and `STRATEGY_SALT` are selected and supplied privately by
   the owner. The parameter JSON is an ordered array of eight field-element strings,
   using the verified slot meanings in [CIRCUIT.md](../docs/CIRCUIT.md). No complete
@@ -92,12 +99,21 @@ still receives `../.env` through its service `env_file`. This keeps literal priv
 values out of Compose interpolation while the exported public hostname is used
 for Caddy.
 
+Compose does not explicitly override `PROOF_VERIFICATION_MODE`: set it in the
+private project-root `.env` service file, or omit it to use the application's
+`local` default. Exporting a shell variable alone does not pass it into this
+service. The commands' `--env-file /dev/null` disables private `.env` interpolation
+but does not disable the raw service `env_file`. If a future Compose configuration
+explicitly sets `${PROOF_VERIFICATION_MODE:-local}`, that `environment` value takes
+precedence over the raw private file and must be controlled by the exported public
+operator environment instead.
+
 Compose fixes `HOST=0.0.0.0`, `PORT=3000`,
 `ARTIFACT_DIRECTORY=/app/artifacts`, and `DATA_DIRECTORY=/app/runtime`.
 It keeps `ZKVERIFY_NETWORK=volta` and `ALLOW_COMPETITION=false`; these explicit
 values take precedence over the private env file. Leave competition disabled
-through validation. Enabling it later requires a deliberate configuration change
-after the tournament-readiness prerequisites are satisfied.
+until practice acceptance is confirmed. Enabling it later requires a deliberate
+configuration change after the tournament-readiness prerequisites are satisfied.
 
 ## Build and start when the owner is ready
 
@@ -132,18 +148,33 @@ curl --show-error --silent --output /dev/null --write-out '%{http_code}\n' \
 ```
 
 Expect **200** for liveness after startup. Readiness is **503** while private
-parameters, salt, Kurier key or pinned artifacts are missing/invalid, and **200**
-after local proof-engine initialization. Docker's health check uses Node's built-in
+parameters, salt or pinned artifacts are missing/invalid, and **200** after
+proof-engine initialization, provided storage is healthy and turns are accepted.
+Valid HMAC configuration is required for HTTP startup. Local mode does not gate
+readiness on `KURIER_API_KEY`; finalized mode additionally requires that key.
+Docker's health check uses Node's built-in
 `fetch` against `/healthz`, so incomplete proof configuration does not prevent Caddy
 from starting. Valid authenticated turns return unproven HOLD when proving is
 unavailable; malformed or unauthenticated requests are rejected. Docker marks failed liveness
 checks unhealthy; its restart policy restarts exited processes, not a running
 process solely because it is unhealthy.
 
-A future 200 from `/readyz` indicates local proof-engine initialization. It does
-not establish live chain finality. Before tournament use, test the official
-contract with the owner's private inputs and an authenticated turn end to end on
-Volta, confirming finalized proof evidence within the turn deadline.
+A 200 from `/readyz` indicates initialized proof configuration, not live platform
+acceptance or chain finality. The current `/build` VFY contract explicitly supports
+offline verification, with `proof` and `public_signals` inside `policyProof` and a
+required `circuitVersion`; the onchain reference is only an optional audit pointer.
+The user approved the local response path as a change to the original frozen
+finality requirement. Local verification does not imply finality or satisfy that
+original requirement.
+
+Before tournament use, confirm authenticated platform practice acceptance and
+fallback behavior for the selected mode. An observed practice envelope allowed
+about 14.75 seconds total and 13.24 seconds of work; local proof generation plus
+verification measured about 2 seconds on the VPS. Kurier Finalized took about
+19 seconds in addition to the local proof, so finalized mode is unsuited to that
+measured deadline. `MAX_TURN_MS` remains 25 seconds, bounded by the earlier envelope
+deadline with the 1.5-second response reserve. No live platform acceptance of the
+local response has yet been confirmed.
 
 ## Single replica and persistent storage
 
@@ -189,7 +220,10 @@ new environment values.
 
 Docker and Caddy are not installed in the authoring environment. Image builds,
 Compose validation with the Docker CLI, container permissions, HTTPS issuance,
-and shutdown behavior have **not been tested** there. No VPS deployment or live
-testnet transaction has been performed. Run the checks above on the intended VPS
-before relying on these files. Supply the owner's private configuration and
-verify live practice/finality before enabling scored matches.
+and shutdown behavior were not tested there. Separate VPS measurements established
+about 2 seconds for local proof generation/verification and about 19 seconds for
+Kurier Finalized, but do not establish platform acceptance or every deployment
+property. Run the checks above on the intended VPS before relying on these files.
+Supply the owner's private configuration and verify live practice acceptance before
+enabling scored matches; finalized mode also needs acceptable audit-pointer and
+finality timing checks.

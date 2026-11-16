@@ -1,6 +1,6 @@
 # Protocol evidence and interoperability notes
 
-Checked 2026-11-15. Sources:
+Updated 2026-11-17 for the user-approved local proof response mode. Sources:
 
 - https://agentgames.zkverify.io/build (Steal the VFY, artifacts, preflight, common mistakes)
 - https://agentgames.zkverify.io/guide (registration and HMAC encoding)
@@ -19,13 +19,21 @@ Preflight request: `type: "agent-games.preflight.v1"`, `agent_id`, `issued_at`, 
 
 Turn: `protocolVersion:"v1"`, `eventId:"steal-the-vfy"`, `mode`, `matchId`, `turn`, `issuedAt`, `deadlineAt`, `state` with decimal-string balances and nullable fortification turns, `strategyCommitment.hash`, `resolverVersion:"v1"`, `nonce`.
 
-Successful response echoes `matchId` and `turn` and includes `action`, `policyProof:{circuitVersion,proofReference,publicInputsHash,proof,public_signals}`, `agentTimestamp`, and `idempotencyKey`. The live official build page checked on 2026-11-16 explicitly requires proof and public_signals INSIDE policyProof, not at the top level; the service follows that placement. HOLD/FORTIFY never include `action.amount`; their internal circuit/audit amount is zero.
+Successful response echoes `matchId` and `turn` and includes `action`, `policyProof:{circuitVersion,publicInputsHash,proof,public_signals}`, `agentTimestamp`, and `idempotencyKey`. The current official `/build` VFY instructions explicitly describe offline verification and require `circuitVersion`, with `proof` and `public_signals` INSIDE `policyProof`. An onchain `proofReference` is an optional audit pointer only. Local mode omits that property entirely; finalized mode adds the validated Kurier transaction hash. The service still computes and includes `publicInputsHash` in both modes. HOLD/FORTIFY never include `action.amount`; their internal circuit/audit amount is zero.
 
 The input parser additionally accepts an explicitly supplied bare 32-byte hash string in `strategyCommitment` and normalizes it to `{hash}` after HMAC verification. This is a compatibility extension, not evidence that the official competition example changed.
 
 Authenticated practice requests observed on 2026-11-16 omit `strategyCommitment` entirely. For `protocolVersion:v1`, `eventId:steal-the-vfy`, `mode:practice` only, an absent field is filled with the commitment already computed from the locally validated parameters/salt and pinned artifacts during proof-engine initialization. This makes the local practice proof self-consistent; it does not assert what the platform has registered/frozen. All other fields, freshness, proof generation, expected public signals and local Groth16 verification remain mandatory. A supplied hash is never overwritten, and explicit null/invalid values remain rejected. Competition requests always require an explicit matching platform commitment, with no fallback. If local proof configuration is unavailable, an absent commitment is still rejected. Live platform acceptance remains to be confirmed.
 
 Diagnostic logs report only allowed field paths, error codes and commitment representation (string/object/null/missing), never received values. Proof fallback logs expose only a fixed failure class (`INVALID_PROOF`, `VERIFICATION`, `DEADLINE`, etc.); proof-stage logs contain only fixed events (`proof_started`, `proof_local_verified`, `verification_started`, `verification_finalized`).
+
+## Proof response modes
+
+`PROOF_VERIFICATION_MODE` accepts `local` or `finalized` and defaults to `local`. The user approved returning the locally verified proof without waiting for Kurier, following the current `/build` offline-verification contract. This changes the original frozen requirement to wait for onchain finality; local verification does not imply Finalized status or meet that original requirement.
+
+In both modes the adapter derives the committed policy action, builds the witness against pinned official artifacts, independently checks all nine expected public signals, verifies Groth16 against the pinned key, computes the exact audit hash, and signs the exact response bytes with HMAC. Commitment validation, field ranges, deadlines, durable replay and failure handling remain strict.
+
+Local mode makes no Kurier submission, requires no `KURIER_API_KEY`, and omits `policyProof.proofReference` entirely rather than sending a null or fabricated value. An already configured key can remain unused. Readiness still requires valid HMAC startup configuration, parameters, salt and pinned artifact/proof-engine initialization. Finalized mode additionally requires the Volta Kurier key and retains `waitFinalized` behavior before adding a validated transaction reference. The mode does not enable competition: `ALLOW_COMPETITION` remains false by default and explicitly false in Compose until practice is accepted.
 
 ## Exact audit hash
 
@@ -44,9 +52,9 @@ Do not reduce these words modulo the scalar field, add fortification/history/non
 
 ## Local failure controls and site inconsistencies
 
-The build prose calls `proofReference` and `publicInputsHash` optional audit pointers, while common mistakes warns that omitting publicInputsHash causes rejection. Successful responses therefore include both. Failed proofs/configuration return HOLD plus its correct audit hash without invented `proof`, `public_signals` or `proofReference`. The committed policy can demand a different action, so there is no general way to produce a valid emergency HOLD proof. The event page describes invalid proofs as a −2 turn penalty and timeout as −1; confirm actual fallback classification in practice.
+The current build instructions treat onchain `proofReference` as an optional audit pointer; common mistakes warns that omitting `publicInputsHash` causes rejection. Successful responses therefore always include the computed `publicInputsHash`, while only finalized mode includes `proofReference`. Failed proofs/configuration return HOLD plus its correct audit hash without invented `proof`, `public_signals` or `proofReference`. The committed policy can demand a different action, so there is no general way to produce a valid emergency HOLD proof. The event page describes invalid proofs as a −2 turn penalty and timeout as −1; confirm actual fallback classification in practice.
 
-The general build/guide says 60-second response deadline. The event page says 5 minutes per turn and approximately 30 seconds per push. The service respects the earlier envelope deadline and `MAX_TURN_MS` (default 25 seconds), subtracting `RESPONSE_RESERVE_MS` (1500 ms) for storage/response. This conservative application default stays inside both documented HTTP windows. Tune only after measuring the actual per-push timeout and proof/finality latency. Do not assume a five-minute turn permits a five-minute HTTP request.
+The general build/guide says 60-second response deadline. The event page says 5 minutes per turn and approximately 30 seconds per push. The service respects the earlier envelope deadline and `MAX_TURN_MS` (default 25 seconds), subtracting `RESPONSE_RESERVE_MS` (1500 ms) for storage/response. An observed practice envelope left about 14.75 seconds total and 13.24 seconds of work budget. Local proof generation and verification measured about 2 seconds on the VPS; Kurier Finalized took about 19 seconds in addition to that proof work, so finalized mode is unsuited to the measured deadline. The real signed HTTP local proof regression completed in 1.59 seconds under a 14.75-second deadline, with proof, exact signals and HMAC checked and no Kurier/reference. This is test evidence, not live platform acceptance. Do not extend the earlier envelope deadline or assume a five-minute turn permits a five-minute HTTP request.
 
 Overload, an expired response deadline or uncertain disk commit returns signed HTTP 503 with no action/key. A stored completed response remains replayable under load. Storage uncertainty disables readiness and future turns until recovery. These are transport failures, not valid policy submissions, and platform scoring remains a live acceptance check.
 
@@ -62,7 +70,9 @@ The publicly delivered commitment-form code requires a 32-byte hex hash and send
 
 `vk_hash` `0x6c56509f1c56fd1fd4e9737f906d2220f4b95f1d507f1adf6899085bd74be047` identifies the platform's mainnet verification key. It is not the private strategy's Poseidon commitment. Only the commitment hash is registered; never publish its parameter array or salt.
 
-## Kurier on Volta
+## Kurier on Volta (`finalized` mode only)
+
+Local mode does not call this API. Finalized mode requires `KURIER_API_KEY` and retains the existing Volta submission and exact finality checks.
 
 Base: `https://api-testnet.kurier.xyz/api/v1`.
 
@@ -83,4 +93,4 @@ Handle HTTP 200 `{jobId,optimisticVerify:"success"}` and HTTP 202 `{jobId,status
 
 `proofReference` is mapped from the finalized top-level `txHash`; Kurier has no field named proofReference. Poll every second within the deadline. No automatic submission retry is performed because Kurier has no documented POST idempotency key. Fetch errors are replaced with fixed codes because URLs contain API keys.
 
-No live authenticated Kurier call or platform practice acceptance has been tested. Verify these with the owner's private environment before competition; do not silently switch the configured network to mainnet.
+A live Kurier Finalized wait was measured at about 19 seconds, plus about 2 seconds for the local proof. This exceeds the observed practice work budget. Live platform acceptance of a local proof response remains unconfirmed; verify it with the owner's private environment before competition. If choosing finalized mode, also verify audit-pointer acceptance and deadline feasibility. Do not silently switch the configured network to mainnet.
