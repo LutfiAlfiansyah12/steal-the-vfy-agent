@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import type { Config } from './config.js';
 import { SIGNATURE_HEADER, sign, verifySignature } from './protocol/hmac.js';
 import { freshTimestamp, preflightSchema, turnSchema } from './protocol/schema.js';
+import { logRequestRejection, logValidationFailure } from './protocol/diagnostics.js';
 import { TurnFailure } from './runtime/deadline.js';
 import type { TurnService } from './runtime/turn-service.js';
 
@@ -58,7 +59,10 @@ export function createAgentServer(config: Config, service: TurnService): Server 
       return send(response, 200, '{"ok":true,"protocolVersion":"v1"}');
     }
     const parsed = turnSchema.safeParse(input);
-    if (!parsed.success) throw new HttpError(400, 'INVALID_ENVELOPE');
+    if (!parsed.success) {
+      logValidationFailure(parsed.error.issues);
+      throw new HttpError(400, 'INVALID_ENVELOPE');
+    }
     const envelope = parsed.data;
     if (!freshTimestamp(envelope.issuedAt, Date.now(), config.maxAgeMs, config.clockSkewMs) || Date.parse(envelope.deadlineAt) < Date.parse(envelope.issuedAt)) throw new HttpError(400, 'STALE_REQUEST');
     const body = await service.handle(envelope, receivedAt);
@@ -70,6 +74,7 @@ export function createAgentServer(config: Config, service: TurnService): Server 
       const unavailable = error instanceof TurnFailure && ['STORAGE', 'OVERLOADED', 'DEADLINE'].includes(error.code);
       const status = error instanceof HttpError ? error.status : error instanceof TurnFailure && error.code === 'CONFLICT' ? 409 : unavailable ? 503 : 500;
       const code = error instanceof HttpError ? error.code : status === 409 ? 'TURN_CONFLICT' : unavailable ? 'TURN_UNAVAILABLE' : 'INTERNAL_ERROR';
+      logRequestRejection(status, code);
       send(response, status, JSON.stringify({ error: code }));
       request.resume();
     });

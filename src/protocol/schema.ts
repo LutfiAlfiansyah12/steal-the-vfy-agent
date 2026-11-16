@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-const uint256 = z.string().regex(/^(0|[1-9][0-9]{0,77})$/).refine((s) => BigInt(s) < 1n << 256n);
+const uint256 = z.string().regex(/^(0|[1-9][0-9]{0,77})$/).refine((s) => /^(0|[1-9][0-9]{0,77})$/.test(s) && BigInt(s) < (1n << 256n));
 const timestamp = z.iso.datetime({ offset: true });
 const hash = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
 export const actionSchema = z.discriminatedUnion('type', [
