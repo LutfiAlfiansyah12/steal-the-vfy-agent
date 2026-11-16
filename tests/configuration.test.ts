@@ -42,6 +42,9 @@ test('configuration is Volta-only and requires real environment setup', () => {
   assert.throws(() => loadConfig({}));
   const env = { AGENT_GAMES_HMAC_SECRET: randomBytes(32).toString('hex') };
   assert.equal(loadConfig(env).allowCompetition, false);
+  assert.equal(loadConfig(env).proofVerificationMode, 'local');
+  assert.equal(loadConfig({ ...env, PROOF_VERIFICATION_MODE: 'finalized' }).proofVerificationMode, 'finalized');
+  assert.throws(() => loadConfig({ ...env, PROOF_VERIFICATION_MODE: 'skip' }));
   assert.throws(() => loadConfig({ ...env, ZKVERIFY_NETWORK: 'mainnet' }));
   assert.throws(() => loadConfig({ ...env, MAX_TURN_MS: '60000' }));
   assert.throws(() => loadConfig({ ...env, MAX_CONCURRENT_PROOFS: 'NaN' }));

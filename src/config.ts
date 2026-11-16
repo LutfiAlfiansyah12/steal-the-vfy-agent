@@ -5,6 +5,7 @@ export interface Config {
   port: number;
   hmacSecret: string;
   kurierApiKey: string;
+  proofVerificationMode: 'local' | 'finalized';
   artifactDirectory: string;
   dataDirectory: string;
   maxTurnMs: number;
@@ -25,6 +26,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const hmacSecret = env.AGENT_GAMES_HMAC_SECRET;
   if (!hmacSecret || hmacSecret.length < 16) throw new Error('AGENT_GAMES_HMAC_SECRET must be configured');
   if (env.ZKVERIFY_NETWORK && env.ZKVERIFY_NETWORK !== 'volta') throw new Error('Only Volta testnet is enabled');
+  const proofVerificationMode = env.PROOF_VERIFICATION_MODE ?? 'local';
+  if (proofVerificationMode !== 'local' && proofVerificationMode !== 'finalized') throw new Error('Invalid PROOF_VERIFICATION_MODE');
   const maxTurnMs = integer(env, 'MAX_TURN_MS', 25_000, 1000, 59_000);
   const responseReserveMs = integer(env, 'RESPONSE_RESERVE_MS', 1500, 100, maxTurnMs - 100);
   if (env.ALLOW_COMPETITION && !['true', 'false'].includes(env.ALLOW_COMPETITION)) throw new Error('Invalid ALLOW_COMPETITION');
@@ -33,6 +36,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: integer(env, 'PORT', 3000, 1, 65535),
     hmacSecret,
     kurierApiKey: env.KURIER_API_KEY ?? '',
+    proofVerificationMode,
     artifactDirectory: resolve(env.ARTIFACT_DIRECTORY ?? 'artifacts'),
     dataDirectory: resolve(env.DATA_DIRECTORY ?? 'runtime'),
     maxTurnMs,

@@ -12,7 +12,7 @@ export interface TurnEvidence {
   action: Action;
   hash: `0x${string}`;
   bundle: ProofBundle;
-  proofReference: string;
+  proofReference?: string;
 }
 export interface Engine { execute(envelope: TurnEnvelope, signal: AbortSignal): Promise<TurnEvidence> }
 
@@ -23,7 +23,7 @@ export class ProofEngine implements Engine {
     private readonly salt: bigint,
     private readonly commitment: `0x${string}`,
     private readonly prover: Prover,
-    private readonly verifier: Verifier,
+    private readonly verifier?: Verifier,
   ) {}
 
   async execute(envelope: TurnEnvelope, signal: AbortSignal): Promise<TurnEvidence> {
@@ -42,6 +42,7 @@ export class ProofEngine implements Engine {
     throwIfAborted(signal);
     validatePublicSignals(bundle.publicSignals);
     if (bundle.publicSignals.some((value, i) => value !== expected[i])) throw new TurnFailure('INVALID_PROOF');
+    if (!this.verifier) return { action, hash, bundle };
     log('verification_started');
     const finalized = await this.verifier.submitAndFinalize(bundle, verificationKey, signal);
     log('verification_finalized');

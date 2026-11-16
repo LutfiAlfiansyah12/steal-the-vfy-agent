@@ -19,12 +19,13 @@ try {
   let practiceCommitment: string | undefined;
   try {
     const contract = OFFICIAL_CIRCUIT;
-    if (!config.kurierApiKey) throw new Error('not configured');
+    if (config.proofVerificationMode === 'finalized' && !config.kurierApiKey) throw new Error('not configured');
     const params = loadPrivateParams(process.env);
     const salt = fieldElement(process.env.STRATEGY_SALT);
     const artifacts = await verifyArtifacts(config.artifactDirectory);
     const commitment = await computeCommitment(contract, params, salt);
-    engine = new ProofEngine(contract, params, salt, commitment, new WorkerProver(artifacts, config.maxConcurrentProofs), new KurierVerifier(config.kurierApiKey));
+    const verifier = config.proofVerificationMode === 'finalized' ? new KurierVerifier(config.kurierApiKey) : undefined;
+    engine = new ProofEngine(contract, params, salt, commitment, new WorkerProver(artifacts, config.maxConcurrentProofs), verifier);
     practiceCommitment = commitment;
   } catch {
     log('not_ready');

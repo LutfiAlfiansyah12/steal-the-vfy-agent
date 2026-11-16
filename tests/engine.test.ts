@@ -231,6 +231,30 @@ test('engine computes the audit hash before proving and submission and returns t
   assert.equal(evidence.bundle, proven.bundle);
 });
 
+test('local verification mode returns checked proof signals without a chain reference or verifier', async () => {
+  let calls = 0;
+  const engine = new ProofEngine(OFFICIAL_CIRCUIT, params, salt, fixture.commitment, {
+    async prove(_witness, expectedSignals) { calls++; return fakeProven(expectedSignals); },
+  });
+  const evidence = await engine.execute(structuredClone(fixture.envelope), new AbortController().signal);
+  assert.equal(calls, 1);
+  assert.equal('proofReference' in evidence, false);
+  assert.equal(evidence.hash, fixture.hash);
+  assert.deepEqual(evidence.bundle.publicSignals, fixture.publicSignals);
+  assert.deepEqual(evidence.action, fixture.action);
+});
+
+test('local verification mode still rejects incorrect public signals', async () => {
+  const engine = new ProofEngine(OFFICIAL_CIRCUIT, params, salt, fixture.commitment, {
+    async prove(_witness, expectedSignals) {
+      const proven = fakeProven(expectedSignals);
+      proven.bundle.publicSignals[0] = expectedSignals[0] === '0' ? '1' : '0';
+      return proven;
+    },
+  });
+  await expectFailure(engine.execute(structuredClone(fixture.envelope), new AbortController().signal), 'INVALID_PROOF');
+});
+
 test('engine rejects a malformed finalized transaction reference', async () => {
   const { engine, events } = harness({
     async submitAndFinalize() {

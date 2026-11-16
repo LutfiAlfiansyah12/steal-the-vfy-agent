@@ -204,6 +204,18 @@ test('competition turns are disabled by default on testnet', async (t) => {
   assert.equal(calls, 0);
 });
 
+test('locally verified response nests proof and signals and omits an unavailable transaction reference', async (t) => {
+  const app = await setup({ execute: async (turn) => ({ action: HOLD, hash: publicInputsHash(turn, HOLD),
+    bundle: { proof: { testOnly: true }, publicSignals: [] } }) }); t.after(app.close);
+  const result = await app.post(JSON.stringify(envelope()));
+  assert.equal(result.status, 200);
+  assert.equal('proofReference' in result.body.policyProof, false);
+  assert.deepEqual(result.body.policyProof.proof, { testOnly: true });
+  assert.deepEqual(result.body.policyProof.public_signals, []);
+  assert.equal('proof' in result.body, false);
+  assert.equal('public_signals' in result.body, false);
+});
+
 test('successful mocked pipeline serializes proof and echoes public envelope fields', async (t) => {
   // This tests serialization only. It is not a valid cryptographic proof or a chosen strategy.
   const proofReference = `0x${'a'.repeat(64)}`;
