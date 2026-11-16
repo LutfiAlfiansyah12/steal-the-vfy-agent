@@ -2,9 +2,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { TurnFailure, throwIfAborted } from '../runtime/deadline.js';
 import type { ProofBundle } from '../protocol/schema.js';
-import { logKurier } from './diagnostics.js';
+import { logJob, logKurier } from './diagnostics.js';
+import { KURIER_TESTNET_BASE } from './job-status.js';
 
-export const KURIER_TESTNET_URL = 'https://api-testnet.kurier.xyz/api/v1';
+export const KURIER_TESTNET_URL = KURIER_TESTNET_BASE;
 export interface FinalizedProof { txHash: string; blockHash?: string; jobId: string }
 export interface Verifier {
   submitAndFinalize(bundle: ProofBundle, verificationKey: Record<string, unknown>, signal: AbortSignal): Promise<FinalizedProof>;
@@ -69,6 +70,8 @@ export class KurierVerifier implements Verifier {
         jobId = pendingSchema.parse(await response.json()).jobId;
       } else throw new TurnFailure('VERIFICATION');
 
+      logJob('accepted', jobId, this.apiKey);
+      let previousState: string | undefined;
       while (true) {
         throwIfAborted(signal);
         logKurier('poll_started');
@@ -77,6 +80,10 @@ export class KurierVerifier implements Verifier {
         if (statusResponse.status !== 200) throw new TurnFailure('VERIFICATION');
         const job = jobSchema.parse(await statusResponse.json());
         if (job.jobId !== jobId || (job.proofType && job.proofType !== 'groth16') || job.errorDetails != null) throw new TurnFailure('VERIFICATION');
+        if (job.status !== previousState) {
+          logJob('state', jobId, this.apiKey, job.status);
+          previousState = job.status;
+        }
         if (job.status === 'Finalized') {
           if (!job.txHash || !txHashPattern.test(job.txHash)) throw new TurnFailure('VERIFICATION');
           if (job.blockHash != null && !txHashPattern.test(job.blockHash)) throw new TurnFailure('VERIFICATION');

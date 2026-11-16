@@ -79,6 +79,11 @@ export class TurnService {
     const fallback = JSON.stringify(this.response(envelope));
     const end = Math.min(Date.parse(envelope.deadlineAt), receivedAt + this.config.maxTurnMs);
     const workDeadline = end - this.config.responseReserveMs;
+    process.stdout.write(`${JSON.stringify({ time: new Date().toISOString(), event: 'turn_budget',
+      envelopeRemainingMs: Math.max(0, Date.parse(envelope.deadlineAt) - receivedAt),
+      localLimitMs: this.config.maxTurnMs,
+      workRemainingMs: Math.max(0, workDeadline - Date.now()),
+    })}\n`);
     if (end - 100 <= Date.now()) throw new TurnFailure('DEADLINE');
     try {
       return await withDeadline(async (signal) => {
