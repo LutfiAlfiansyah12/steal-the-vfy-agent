@@ -5,6 +5,7 @@ import { HOLD, type TurnEnvelope, type TurnResponse } from '../protocol/schema.j
 import { TurnFailure, withDeadline, throwIfAborted } from './deadline.js';
 import type { Engine } from './engine.js';
 import { log } from './log.js';
+import { logTurnFailure } from './failure.js';
 import { turnFingerprint, turnKey, type TurnStore } from './store.js';
 
 export class TurnService {
@@ -100,7 +101,8 @@ export class TurnService {
               proof: evidence.bundle.proof, public_signals: evidence.bundle.publicSignals,
             };
             body = JSON.stringify(response);
-          } catch {
+          } catch (error) {
+            logTurnFailure(error);
             log('turn_hold');
           }
         }

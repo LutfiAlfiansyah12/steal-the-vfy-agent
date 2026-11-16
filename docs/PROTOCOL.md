@@ -25,7 +25,7 @@ The input parser additionally accepts an explicitly supplied bare 32-byte hash s
 
 Authenticated practice requests observed on 2026-11-16 omit `strategyCommitment` entirely. For `protocolVersion:v1`, `eventId:steal-the-vfy`, `mode:practice` only, an absent field is filled with the commitment already computed from the locally validated parameters/salt and pinned artifacts during proof-engine initialization. This makes the local practice proof self-consistent; it does not assert what the platform has registered/frozen. All other fields, freshness, proof generation, expected public signals and local Groth16 verification remain mandatory. A supplied hash is never overwritten, and explicit null/invalid values remain rejected. Competition requests always require an explicit matching platform commitment, with no fallback. If local proof configuration is unavailable, an absent commitment is still rejected. Live platform acceptance remains to be confirmed.
 
-Diagnostic logs report only allowed field paths, error codes and commitment representation (string/object/null/missing), never received values.
+Diagnostic logs report only allowed field paths, error codes and commitment representation (string/object/null/missing), never received values. Proof fallback logs expose only a fixed failure class (`INVALID_PROOF`, `VERIFICATION`, `DEADLINE`, etc.); proof-stage logs contain only fixed events (`proof_started`, `proof_local_verified`, `verification_started`, `verification_finalized`).
 
 ## Exact audit hash
 

@@ -6,6 +6,7 @@ import type { CircuitContract, StrategyParams } from '../strategy/contract.js';
 import { policy, policyState } from '../strategy/policy.js';
 import type { Verifier } from '../verification/kurier.js';
 import { TurnFailure, throwIfAborted } from './deadline.js';
+import { log } from './log.js';
 
 export interface TurnEvidence {
   action: Action;
@@ -35,11 +36,15 @@ export class ProofEngine implements Engine {
     throwIfAborted(signal);
     validatePublicSignals(expected);
     const witness = this.contract.buildWitness(envelope, action, this.params, this.salt);
+    log('proof_started');
     const { bundle, verificationKey } = await this.prover.prove(witness, expected, signal);
+    log('proof_local_verified');
     throwIfAborted(signal);
     validatePublicSignals(bundle.publicSignals);
     if (bundle.publicSignals.some((value, i) => value !== expected[i])) throw new TurnFailure('INVALID_PROOF');
+    log('verification_started');
     const finalized = await this.verifier.submitAndFinalize(bundle, verificationKey, signal);
+    log('verification_finalized');
     throwIfAborted(signal);
     if (!/^0x[0-9a-fA-F]{64}$/.test(finalized.txHash)) throw new TurnFailure('VERIFICATION');
     return { action, hash, bundle, proofReference: finalized.txHash };
