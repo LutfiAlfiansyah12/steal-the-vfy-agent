@@ -16,8 +16,19 @@ export function validationSummary(issues: readonly z.core.$ZodIssue[]): readonly
   });
 }
 
-export function logValidationFailure(issues: readonly z.core.$ZodIssue[]): void {
-  process.stdout.write(`${JSON.stringify({ time: new Date().toISOString(), event: 'invalid_envelope', issues: validationSummary(issues) })}\n`);
+export function commitmentShape(input: unknown): string {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || !Object.hasOwn(input, 'strategyCommitment')) return 'missing';
+  const value = (input as Record<string, unknown>).strategyCommitment;
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'object') return 'object';
+  if (typeof value === 'string') return 'string';
+  return 'other';
+}
+
+export function logValidationFailure(issues: readonly z.core.$ZodIssue[], input?: unknown): void {
+  const shape = issues.some((issue) => issue.path[0] === 'strategyCommitment') ? { commitmentShape: commitmentShape(input) } : {};
+  process.stdout.write(`${JSON.stringify({ time: new Date().toISOString(), event: 'invalid_envelope', issues: validationSummary(issues), ...shape })}\n`);
 }
 
 export function logRequestRejection(status: number, code: string): void {

@@ -195,6 +195,16 @@ test('EXTRACT accepts exactly integer amounts 1 through 10', () => {
   }
 });
 
+test('bare and object strategy commitments normalize to the same verified hash and audit inputs', () => {
+  const bare = turnSchema.parse({ ...PUBLIC_TURN, strategyCommitment: PUBLIC_TURN.strategyCommitment.hash });
+  const wrapped = turnSchema.parse(PUBLIC_TURN);
+  assert.deepEqual(bare, wrapped);
+  assert.equal(publicInputsHash(bare, { type: 'HOLD' }), publicInputsHash(wrapped, { type: 'HOLD' }));
+  for (const invalid of [undefined, null, '', '0x1234', 1, [], { hash: null }, { commitmentHash: PUBLIC_TURN.strategyCommitment.hash }]) {
+    assert.equal(turnSchema.safeParse({ ...PUBLIC_TURN, strategyCommitment: invalid }).success, false);
+  }
+});
+
 test('action schema rejects unknown types and extra action properties', () => {
   for (const action of [{}, { type: 'hold' }, { type: 'STEAL', amount: 1 }, { type: 'EXTRACT', amount: 1, extra: true }]) {
     assert.equal(actionSchema.safeParse(action).success, false);

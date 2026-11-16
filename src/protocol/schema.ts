@@ -28,7 +28,12 @@ export const turnSchema = z.object({
     selfFortifiedUntilTurn: z.number().int().min(0).max(20).nullable(),
     opponentFortifiedUntilTurn: z.number().int().min(0).max(20).nullable(),
   }),
-  strategyCommitment: z.object({ hash }),
+  // Accept a supplied bare hash as well as { hash }. Normalize its representation
+  // only; never invent a commitment for null/missing input.
+  strategyCommitment: z.preprocess(
+    (value) => typeof value === 'string' ? { hash: value } : value,
+    z.object({ hash }),
+  ),
   resolverVersion: z.literal('v1'),
   nonce: z.string().min(1).max(256),
 });

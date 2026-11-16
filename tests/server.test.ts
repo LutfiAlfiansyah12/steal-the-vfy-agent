@@ -78,6 +78,19 @@ test('unconfigured strategy returns signed HOLD without claiming a proof', async
   assert.equal('public_signals' in response.body, false);
 });
 
+test('signed bare commitment is normalized after authentication and replays the object representation', async (t) => {
+  const app = await setup(); t.after(app.close);
+  const turn = envelope();
+  const original = await app.post(JSON.stringify(turn));
+  const normalized = await app.post(JSON.stringify({ ...turn, strategyCommitment: turn.strategyCommitment.hash }));
+  assert.equal(normalized.status, 200);
+  assert.equal(normalized.raw, original.raw);
+  const badSignature = await app.post(JSON.stringify({ ...turn, strategyCommitment: turn.strategyCommitment.hash }), '0'.repeat(64));
+  assert.equal(badSignature.status, 401);
+  const missing = await app.post(JSON.stringify({ ...turn, strategyCommitment: null }));
+  assert.equal(missing.status, 400);
+});
+
 test('same turn replays exact bytes across new nonce and service restart; keys differ across turns', async (t) => {
   const app = await setup(); t.after(app.close);
   const turn = envelope();

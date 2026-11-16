@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { turnSchema } from '../src/protocol/schema.js';
-import { validationSummary } from '../src/protocol/diagnostics.js';
+import { commitmentShape, validationSummary } from '../src/protocol/diagnostics.js';
+
+test('commitment diagnostics report representation only, without values', () => {
+  assert.equal(commitmentShape({}), 'missing');
+  assert.equal(commitmentShape({ strategyCommitment: null }), 'null');
+  assert.equal(commitmentShape({ strategyCommitment: 'sensitive-fixture-marker' }), 'string');
+  assert.equal(commitmentShape({ strategyCommitment: { hash: 'sensitive-fixture-marker' } }), 'object');
+  assert.equal(commitmentShape({ strategyCommitment: [] }), 'array');
+  assert.equal(commitmentShape({ strategyCommitment: 42 }), 'other');
+});
 
 test('validation diagnostics contain allowed field paths and codes, never received values', () => {
   const marker = 'sensitive-fixture-marker';

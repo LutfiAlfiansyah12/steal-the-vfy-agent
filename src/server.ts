@@ -60,7 +60,7 @@ export function createAgentServer(config: Config, service: TurnService): Server 
     }
     const parsed = turnSchema.safeParse(input);
     if (!parsed.success) {
-      logValidationFailure(parsed.error.issues);
+      logValidationFailure(parsed.error.issues, input);
       throw new HttpError(400, 'INVALID_ENVELOPE');
     }
     const envelope = parsed.data;
