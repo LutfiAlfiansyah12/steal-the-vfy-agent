@@ -22,14 +22,14 @@ function envelope(): TurnEnvelope {
     strategyCommitment: { hash: `0x${'0'.repeat(64)}` }, resolverVersion: 'v1', nonce: 'public-test-nonce',
   };
 }
-async function setup(engine?: Engine) {
+async function setup(engine?: Engine, practiceCommitment?: string) {
   const directory = await mkdtemp(join(tmpdir(), 'vfy-test-'));
   const secret = randomBytes(32).toString('hex');
   const config = loadConfig({ AGENT_GAMES_HMAC_SECRET: secret, DATA_DIRECTORY: directory, MAX_TURN_MS: '1000', RESPONSE_RESERVE_MS: '200' });
   const store = new FileTurnStore(directory);
   await store.initialize();
   const service = new TurnService(config, store, engine);
-  const server = createAgentServer(config, service);
+  const server = createAgentServer(config, service, practiceCommitment);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   async function post(body: string, signature = sign(body, secret), headers: Record<string, string> = {}) {
@@ -89,6 +89,30 @@ test('signed bare commitment is normalized after authentication and replays the 
   assert.equal(badSignature.status, 401);
   const missing = await app.post(JSON.stringify({ ...turn, strategyCommitment: null }));
   assert.equal(missing.status, 400);
+});
+
+test('authenticated practice without commitment uses the configured local hash and preserves replay', async (t) => {
+  const turn = envelope();
+  let receivedCommitment: string | undefined;
+  const app = await setup({ execute: async (received) => {
+    receivedCommitment = received.strategyCommitment.hash;
+    throw new Error('synthetic proof failure');
+  } }, turn.strategyCommitment.hash); t.after(app.close);
+  const { strategyCommitment, ...missing } = turn;
+  assert.equal((await app.post(JSON.stringify(missing), '0'.repeat(64))).status, 401);
+  const response = await app.post(JSON.stringify(missing));
+  assert.equal(response.status, 200);
+  assert.equal(receivedCommitment, strategyCommitment.hash);
+  assert.equal(response.body.policyProof.publicInputsHash, publicInputsHash(turn, HOLD));
+  assert.equal((await app.post(JSON.stringify(turn))).raw, response.raw);
+  assert.equal((await app.post(JSON.stringify({ ...missing, mode: 'competition' }))).status, 400);
+  assert.equal((await app.post(JSON.stringify({ ...missing, strategyCommitment: null }))).status, 400);
+});
+
+test('missing practice commitment stays rejected when the local proof configuration is unavailable', async (t) => {
+  const app = await setup(); t.after(app.close);
+  const { strategyCommitment: _unused, ...missing } = envelope();
+  assert.equal((await app.post(JSON.stringify(missing))).status, 400);
 });
 
 test('same turn replays exact bytes across new nonce and service restart; keys differ across turns', async (t) => {

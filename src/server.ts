@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import type { Config } from './config.js';
 import { SIGNATURE_HEADER, sign, verifySignature } from './protocol/hmac.js';
-import { freshTimestamp, preflightSchema, turnSchema } from './protocol/schema.js';
+import { freshTimestamp, parseTurnEnvelope, preflightSchema } from './protocol/schema.js';
 import { logRequestRejection, logValidationFailure } from './protocol/diagnostics.js';
 import { TurnFailure } from './runtime/deadline.js';
 import type { TurnService } from './runtime/turn-service.js';
@@ -25,7 +25,7 @@ async function rawBody(request: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-export function createAgentServer(config: Config, service: TurnService): Server {
+export function createAgentServer(config: Config, service: TurnService, practiceCommitment?: string): Server {
   function send(response: ServerResponse, status: number, body: string): void {
     if (response.destroyed || response.writableEnded) return;
     response.writeHead(status, {
@@ -58,7 +58,7 @@ export function createAgentServer(config: Config, service: TurnService): Server 
       if (!freshTimestamp(preflight.data.issued_at, Date.now(), config.maxAgeMs, config.clockSkewMs)) throw new HttpError(400, 'STALE_REQUEST');
       return send(response, 200, '{"ok":true,"protocolVersion":"v1"}');
     }
-    const parsed = turnSchema.safeParse(input);
+    const parsed = parseTurnEnvelope(input, practiceCommitment);
     if (!parsed.success) {
       logValidationFailure(parsed.error.issues, input);
       throw new HttpError(400, 'INVALID_ENVELOPE');

@@ -16,6 +16,7 @@ try {
   const store = new FileTurnStore(config.dataDirectory);
   await store.initialize();
   let engine: ProofEngine | undefined;
+  let practiceCommitment: string | undefined;
   try {
     const contract = OFFICIAL_CIRCUIT;
     if (!config.kurierApiKey) throw new Error('not configured');
@@ -24,11 +25,12 @@ try {
     const artifacts = await verifyArtifacts(config.artifactDirectory);
     const commitment = await computeCommitment(contract, params, salt);
     engine = new ProofEngine(contract, params, salt, commitment, new WorkerProver(artifacts, config.maxConcurrentProofs), new KurierVerifier(config.kurierApiKey));
+    practiceCommitment = commitment;
   } catch {
     log('not_ready');
   }
   const service = new TurnService(config, store, engine);
-  const server = createAgentServer(config, service);
+  const server = createAgentServer(config, service, practiceCommitment);
   server.on('error', () => { log('startup_failed'); process.exitCode = 1; });
   server.listen(config.port, config.host, () => log('started'));
   let stopping = false;

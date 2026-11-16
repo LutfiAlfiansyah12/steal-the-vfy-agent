@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { keccak256 } from 'viem';
 import { SIGNATURE_HEADER, sign, verifySignature } from '../src/protocol/hmac.js';
 import { publicInputsHash, publicInputsWords } from '../src/protocol/hash.js';
-import { actionAmount, actionCode, actionSchema, turnSchema, type Action, type TurnEnvelope } from '../src/protocol/schema.js';
+import { actionAmount, actionCode, actionSchema, parseTurnEnvelope, turnSchema, type Action, type TurnEnvelope } from '../src/protocol/schema.js';
 
 // Arbitrary public protocol data, with balances above Number.MAX_SAFE_INTEGER.
 // No strategy parameters, circuit witness, or claim of a valid proof is involved.
@@ -203,6 +203,24 @@ test('bare and object strategy commitments normalize to the same verified hash a
   for (const invalid of [undefined, null, '', '0x1234', 1, [], { hash: null }, { commitmentHash: PUBLIC_TURN.strategyCommitment.hash }]) {
     assert.equal(turnSchema.safeParse({ ...PUBLIC_TURN, strategyCommitment: invalid }).success, false);
   }
+});
+
+test('only practice may bind an omitted commitment to the verified local commitment', () => {
+  const { strategyCommitment, ...missing } = PUBLIC_TURN;
+  const parsed = parseTurnEnvelope(missing, strategyCommitment.hash);
+  assert.equal(parsed.success, true);
+  if (parsed.success) assert.deepEqual(parsed.data, PUBLIC_TURN);
+  assert.equal(Object.hasOwn(missing, 'strategyCommitment'), false);
+  assert.equal(parseTurnEnvelope(missing).success, false);
+  assert.equal(parseTurnEnvelope(missing, 'invalid-local-hash').success, false);
+  assert.equal(parseTurnEnvelope({ ...missing, mode: 'competition' }, strategyCommitment.hash).success, false);
+  for (const invalid of [null, '', '0x1234', {}, { hash: null }]) {
+    assert.equal(parseTurnEnvelope({ ...missing, strategyCommitment: invalid }, strategyCommitment.hash).success, false);
+  }
+  const supplied = `0x${'a'.repeat(64)}`;
+  const original = parseTurnEnvelope({ ...PUBLIC_TURN, strategyCommitment: { hash: supplied } }, strategyCommitment.hash);
+  assert.equal(original.success, true);
+  if (original.success) assert.equal(original.data.strategyCommitment.hash, supplied);
 });
 
 test('action schema rejects unknown types and extra action properties', () => {

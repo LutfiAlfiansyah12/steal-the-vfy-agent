@@ -21,7 +21,11 @@ Turn: `protocolVersion:"v1"`, `eventId:"steal-the-vfy"`, `mode`, `matchId`, `tur
 
 Successful response echoes `matchId` and `turn` and includes `action`, `policyProof:{circuitVersion,proofReference,publicInputsHash,proof,public_signals}`, `agentTimestamp`, and `idempotencyKey`. The live official build page checked on 2026-11-16 explicitly requires proof and public_signals INSIDE policyProof, not at the top level; the service follows that placement. HOLD/FORTIFY never include `action.amount`; their internal circuit/audit amount is zero.
 
-The input parser additionally accepts an explicitly supplied bare 32-byte hash string in `strategyCommitment` and normalizes it to `{hash}` after HMAC verification. This is a compatibility extension, not evidence that the official competition example changed. Missing/null/invalid commitments are still rejected and never replaced with the agent's local hash. Diagnostic logs report only allowed field paths, error codes and commitment representation (string/object/null/missing), never received values.
+The input parser additionally accepts an explicitly supplied bare 32-byte hash string in `strategyCommitment` and normalizes it to `{hash}` after HMAC verification. This is a compatibility extension, not evidence that the official competition example changed.
+
+Authenticated practice requests observed on 2026-11-16 omit `strategyCommitment` entirely. For `protocolVersion:v1`, `eventId:steal-the-vfy`, `mode:practice` only, an absent field is filled with the commitment already computed from the locally validated parameters/salt and pinned artifacts during proof-engine initialization. This makes the local practice proof self-consistent; it does not assert what the platform has registered/frozen. All other fields, freshness, proof generation, expected public signals and local Groth16 verification remain mandatory. A supplied hash is never overwritten, and explicit null/invalid values remain rejected. Competition requests always require an explicit matching platform commitment, with no fallback. If local proof configuration is unavailable, an absent commitment is still rejected. Live platform acceptance remains to be confirmed.
+
+Diagnostic logs report only allowed field paths, error codes and commitment representation (string/object/null/missing), never received values.
 
 ## Exact audit hash
 

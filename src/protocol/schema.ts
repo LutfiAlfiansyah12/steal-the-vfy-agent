@@ -38,6 +38,20 @@ export const turnSchema = z.object({
   nonce: z.string().min(1).max(256),
 });
 export type TurnEnvelope = z.infer<typeof turnSchema>;
+
+/** Only signed practice requests may omit the commitment; competition stays strict. */
+export function parseTurnEnvelope(input: unknown, practiceCommitment?: string): ReturnType<typeof turnSchema.safeParse> {
+  let candidate = input;
+  if (practiceCommitment !== undefined && hash.safeParse(practiceCommitment).success
+    && input !== null && typeof input === 'object' && !Array.isArray(input)) {
+    const record = input as Record<string, unknown>;
+    if (record.protocolVersion === 'v1' && record.eventId === 'steal-the-vfy'
+      && record.mode === 'practice' && !Object.hasOwn(record, 'strategyCommitment')) {
+      candidate = { ...record, strategyCommitment: { hash: practiceCommitment } };
+    }
+  }
+  return turnSchema.safeParse(candidate);
+}
 export const preflightSchema = z.object({
   type: z.literal('agent-games.preflight.v1'),
   agent_id: z.string().min(1).max(128),
