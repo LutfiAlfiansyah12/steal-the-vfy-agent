@@ -2,6 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { TurnFailure, throwIfAborted } from '../runtime/deadline.js';
 import type { ProofBundle } from '../protocol/schema.js';
+import { logKurier } from './diagnostics.js';
 
 export const KURIER_TESTNET_URL = 'https://api-testnet.kurier.xyz/api/v1';
 export interface FinalizedProof { txHash: string; blockHash?: string; jobId: string }
@@ -41,6 +42,7 @@ export class KurierVerifier implements Verifier {
       });
     } catch {
       // Fetch exceptions may contain the API key in the URL. Never propagate them.
+      logKurier('fetch_failed');
       throw new TurnFailure('VERIFICATION');
     }
   }
@@ -50,6 +52,7 @@ export class KurierVerifier implements Verifier {
     const key = encodeURIComponent(this.apiKey);
     try {
       // No automatic POST retries: the upstream API has no documented idempotency key.
+      logKurier('submit_started');
       const response = await this.request(`/submit-proof/${key}`, signal, {
         proofType: 'groth16',
         vkRegistered: false,
@@ -57,6 +60,7 @@ export class KurierVerifier implements Verifier {
         proofData: { proof: bundle.proof, publicSignals: bundle.publicSignals, vk: verificationKey },
       });
       let jobId: string;
+      logKurier('submit_response', response.status);
       if (response.status === 200) {
         const job = acceptedSchema.parse(await response.json());
         if (job.optimisticVerify !== 'success' || job.error) throw new TurnFailure('VERIFICATION');
@@ -67,7 +71,9 @@ export class KurierVerifier implements Verifier {
 
       while (true) {
         throwIfAborted(signal);
+        logKurier('poll_started');
         const statusResponse = await this.request(`/job-status/${key}/${encodeURIComponent(jobId)}`, signal);
+        logKurier('poll_response', statusResponse.status);
         if (statusResponse.status !== 200) throw new TurnFailure('VERIFICATION');
         const job = jobSchema.parse(await statusResponse.json());
         if (job.jobId !== jobId || (job.proofType && job.proofType !== 'groth16') || job.errorDetails != null) throw new TurnFailure('VERIFICATION');
